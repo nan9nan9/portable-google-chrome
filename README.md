@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/nan9nan9/portable-google-chrome?sort=semver)](https://github.com/nan9nan9/portable-google-chrome/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/nan9nan9/portable-google-chrome/total)](https://github.com/nan9nan9/portable-google-chrome/releases)
 [![Platform](https://img.shields.io/badge/platform-linux--x86__64-blue)](#동작-원리)
-[![glibc](https://img.shields.io/badge/glibc-%E2%89%A5%202.31%20(Debian11%2FUbuntu20.04%2FRHEL9)-green)](#동작-원리)
+[![glibc](https://img.shields.io/badge/glibc-%E2%89%A5%202.28%20(RHEL8%2FCentOS8%2FDebian10)-green)](#동작-원리)
 
 설치 없이 실행 가능한 `google-chrome-stable` 포터블 빌드입니다.
 파일 하나(AppImage)만 복사하면 대부분의 최신 x86_64 리눅스에서 바로 실행되고,
@@ -33,14 +33,17 @@ chmod +x Google-Chrome-x86_64.AppImage
 
 ## 동작 원리
 
-- **Chrome 은 사전 빌드된 독점 바이너리**입니다. 소스 컴파일이 없으므로 Chrome 자체의
-  glibc 하한은 바이너리가 결정합니다. 다만 **함께 번들하는 의존 라이브러리는 빌드
-  베이스의 glibc 에 링크**되므로, 베이스가 너무 최신이면 번들 라이브러리가 호스트에 더
-  높은 glibc 를 요구해 오래된 호스트에서 실행이 실패합니다. 그래서 "현재 Chrome stable 이
-  여전히 실행되는 가장 낮은 배포판"인 **Debian 11(glibc 2.31)** 을 베이스로 씁니다.
-  (검증: Debian 11 에서 Chrome 150 정상 실행. 하한선 glibc 2.31 → Debian 11 / Ubuntu 20.04 /
-  RHEL 9(2.34) 등 폭넓게 커버) `apt` 로 `google-chrome-stable` 을 설치하면 Chrome 본체와
-  모든 런타임 의존 라이브러리가 함께 들어오므로 `ldd` 로 전부 수집할 수 있습니다.
+- **Chrome 은 사전 빌드된 독점 바이너리**입니다. Chrome 자체의 glibc 요구는 바이너리가
+  결정하며, 실측 결과 **Chrome 150 바이너리는 최대 GLIBC_2.25 만 요구**합니다. 반면
+  **함께 번들하는 의존 라이브러리는 빌드 베이스의 glibc 에 링크**되므로, 베이스가 너무
+  최신이면 번들 라이브러리가 호스트에 더 높은 glibc 를 요구해 오래된 호스트에서 실행이
+  실패합니다. 그래서 하한선을 낮추려면 **베이스 자체를 낮춰야** 합니다. 이 프로젝트는
+  **Debian 10(buster, glibc 2.28)** 을 베이스로 써서 번들 라이브러리 요구를 **≤ 2.28** 로
+  맞춥니다. (검증: 번들 전체 최대 GLIBC 심볼 2.28, buster 에서 Chrome 150 렌더링 정상.
+  하한선 glibc 2.28 → RHEL 8 / CentOS 8 / Debian 10 / Ubuntu 20.04+ 등 커버)
+  buster 는 EOL 이라 `Dockerfile` 에서 apt 소스를 `archive.debian.org` 로 교체합니다.
+  `apt` 로 `google-chrome-stable` 을 설치하면 Chrome 본체와 모든 런타임 의존 라이브러리가
+  함께 들어오므로 `ldd` 로 전부 수집할 수 있습니다.
 - Chrome 바이너리와 의존 라이브러리(GTK3, NSS/NSPR, glib, pango, cairo, harfbuzz 등),
   gdk-pixbuf 로더, GSettings 스키마를 하나의 AppDir 로 모아 AppImage 로 패키징합니다.
 - **glibc / GL / EGL / DRM / gbm / vulkan / wayland** 등 호스트 하드웨어·드라이버·
@@ -124,7 +127,7 @@ cd offline-bundle
 
 | 파일 | 설명 |
 |------|------|
-| `Dockerfile` | Debian 11(glibc 2.31) 기반 빌드 환경 (Chrome + 의존성 + appimagetool 포함) |
+| `Dockerfile` | Debian 10(buster, glibc 2.28) 기반 빌드 환경 (Chrome + 의존성 + appimagetool 포함) |
 | `build.sh` | (온라인) 이미지 빌드 + 컨테이너 실행 오케스트레이터 |
 | `build-offline-save.sh` | (온라인) 빌더 이미지를 tar 로 저장 |
 | `build-offline-run.sh` | (오프라인) tar 로드 후 네트워크 차단 빌드 |

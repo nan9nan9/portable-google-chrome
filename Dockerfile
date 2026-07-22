@@ -1,22 +1,32 @@
 # Portable Google Chrome 빌더 이미지
 #
-# Chrome 은 사전 빌드된 독점 바이너리라 glibc 하한을 우리가 낮출 수 없다.
-# (하한은 Chrome 바이너리 자신이 결정) → 그러나 "번들 라이브러리"는 빌드 베이스의
-# glibc 에 링크되므로, 베이스가 새로우면 번들 라이브러리가 호스트에 더 높은 glibc 를
-# 요구하게 된다. 따라서 "현재 Chrome stable 이 여전히 실행되는 가장 낮은 배포판"을
-# 골라 하한선을 최소화한다. 검증 결과 Debian 11(glibc 2.31)에서 Chrome 150 정상 실행.
-# → 하한선 glibc 2.31 (Debian11 / Ubuntu20.04 / RHEL9(2.34) 등 폭넓게 커버).
-# apt 로 google-chrome-stable 을 설치하면 Chrome 본체 + 모든 런타임 의존
-# 라이브러리가 이미지에 함께 들어오므로 ldd 로 전부 수집할 수 있다.
-FROM debian:11-slim
+# Chrome 은 사전 빌드된 독점 바이너리라 Chrome 자체의 glibc 요구는 고정이다.
+# (실측: Chrome 150 바이너리는 최대 GLIBC_2.25 만 요구)
+# 반면 "함께 번들하는 의존 라이브러리"는 빌드 베이스의 glibc 에 링크되므로,
+# 베이스가 새로우면 번들 라이브러리가 호스트에 더 높은 glibc 를 요구해 오래된
+# 호스트에서 실행이 실패한다. → 하한선을 낮추려면 "베이스 자체를 낮춰야" 한다.
+#
+# 목표: glibc 2.28 (RHEL8/CentOS8/Debian10 계열)에서 실행.
+# 그래서 베이스를 Debian 10(buster, glibc 2.28)로 쓴다.
+# (검증: buster 에서 Chrome 150 설치·헤드리스 렌더링 정상. 번들 라이브러리 glibc
+#  요구는 ≤2.28 로 떨어지고 Chrome 은 2.25 만 필요 → 하한선 glibc 2.28)
+#
+# buster 는 EOL 이라 apt 저장소가 archive.debian.org 로 이동했으므로 소스를 교체한다.
+FROM debian:10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# buster 아카이브 소스로 교체 + 만료된 Release 파일 허용
+RUN printf '%s\n' \
+        'deb [check-valid-until=no] http://archive.debian.org/debian buster main' \
+        'deb [check-valid-until=no] http://archive.debian.org/debian-security buster/updates main' \
+        > /etc/apt/sources.list \
+    && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid
 
 # 빌드/패키징에 필요한 도구
 #  - file, binutils         : ELF 검사
 #  - squashfs-tools         : appimagetool 이 squashfs 생성에 사용
 #  - libglib2.0-bin         : glib-compile-schemas
-#  - fuse3/libfuse2         : appimagetool 실행 편의 (실제로는 extract-and-run 사용)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg file binutils xz-utils \
         squashfs-tools libglib2.0-bin \
