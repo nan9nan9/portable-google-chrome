@@ -1,0 +1,7 @@
+dist/
+offline-bundle/
+.claude/settings.local.json
+AppDir/
+squashfs-root/
+*.AppImage
+chrome-portable-data/
