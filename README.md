@@ -59,6 +59,14 @@ chmod +x Google-Chrome-x86_64.AppImage
 - **포터블 프로필**: 실행 시 AppImage 파일이 있는 폴더에 `chrome-portable-data/` 를
   만들어 `--user-data-dir` 로 사용합니다. USB/공유폴더에 AppImage 를 두면 설정도 함께
   따라다닙니다.
+- **방해 요소 제거(기본값)**: 포터블 환경에 맞게 아래를 기본으로 끕니다.
+  - **시스템 키링 잠금해제 팝업** — 비밀번호/쿠키 암호화를 OS 키링(GNOME Keyring/KWallet)
+    대신 프로필 내부 `basic` 저장소로 처리(`--password-store=basic`). "Unlock Login Keyring"
+    창이 뜨지 않고, 데이터가 프로필과 함께 이동합니다. (보안 트레이드오프: OS 키링보다
+    약한 난독화 저장. 시스템 키링을 쓰려면 `CHROME_USE_KEYRING=1`)
+  - **첫 실행 안내 / 기본 브라우저 설정 배너 / 사용 통계 프롬프트** — `--no-first-run`,
+    `--no-default-browser-check` 및 바이너리 옆 `initial_preferences`(기본 브라우저 설정 안 함,
+    사용 통계 보고 비활성)로 억제. (원래 프롬프트를 보려면 `CHROME_SHOW_PROMPTS=1`)
 
 ## 빌드 방법
 
@@ -91,8 +99,13 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 | 항목 | 설명 |
 |------|------|
 | `CHROME_USER_DATA_DIR=<경로>` | 포터블 프로필 위치 변경 (기본: AppImage 옆 `chrome-portable-data/`) |
+| `CHROME_USE_KEYRING=1` | 프로필 내부 저장소 대신 시스템 키링(GNOME Keyring/KWallet) 사용 |
+| `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
 | `CHROME_NO_SANDBOX=1` | 강제로 `--no-sandbox` 실행 (보안 저하, 문제 진단용) |
 | `--user-data-dir=<경로>` | 직접 지정하면 포터블 프로필 주입을 생략 (일반 Chrome 처럼 동작) |
+
+> 위 방해 요소 억제 플래그(`--password-store`, `--no-first-run`, `--no-default-browser-check`)는
+> 사용자가 같은 플래그를 직접 넘기면 중복 주입하지 않고 사용자 값을 존중합니다.
 
 일반 Chrome 플래그(`--incognito`, `--proxy-server=...` 등)는 그대로 전달됩니다.
 

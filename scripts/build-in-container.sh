@@ -137,6 +137,27 @@ MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme
 StartupNotify=true
 EOF
 
+# ── 5.5) initial_preferences: 새 프로필 생성 시 기본값 시드 ────────────────
+# Chrome 은 바이너리 옆의 initial_preferences 를 새 프로필 초기값으로 읽는다.
+# 기본 브라우저 설정 안 함 / 기본 브라우저 확인 안 함 / 사용 통계 보고 비활성.
+echo "==> initial_preferences 작성"
+cat > "$APPDIR/opt/google/chrome/initial_preferences" <<'PREF'
+{
+  "distribution": {
+    "make_chrome_default": false,
+    "make_chrome_default_for_user": false,
+    "suppress_first_run_default_browser_prompt": true,
+    "do_not_create_desktop_shortcut": true,
+    "do_not_create_quick_launch_shortcut": true,
+    "do_not_register_for_update_launch": true
+  },
+  "browser": {
+    "check_default_browser": false
+  },
+  "metrics_reporting_enabled": false
+}
+PREF
+
 # ── 6) AppRun 작성 ────────────────────────────────────────────────────────
 echo "==> AppRun 작성"
 cat > "$APPDIR/AppRun" <<'APPRUN'
@@ -169,13 +190,26 @@ else
 fi
 DATA_DIR="${CHROME_USER_DATA_DIR:-$BASE_DIR/chrome-portable-data}"
 
+# 사용자가 이미 준 플래그는 중복 주입하지 않는다
+has_flag() { local pfx="$1"; shift; for a in "$@"; do case "$a" in "$pfx"|"$pfx"=*) return 0;; esac; done; return 1; }
+
 EXTRA=()
-# 사용자가 직접 --user-data-dir 을 주지 않은 경우에만 포터블 경로 주입
-_has_udd=0
-for a in "$@"; do
-    case "$a" in --user-data-dir|--user-data-dir=*) _has_udd=1;; esac
-done
-[ "$_has_udd" -eq 0 ] && EXTRA+=("--user-data-dir=$DATA_DIR")
+# 포터블 프로필 (사용자가 직접 지정하지 않은 경우)
+has_flag --user-data-dir "$@" || EXTRA+=("--user-data-dir=$DATA_DIR")
+
+# 시스템 키링(GNOME Keyring/KWallet) 잠금해제 팝업 방지:
+#   비밀번호/쿠키 암호화를 OS 키링 대신 프로필 내부 basic 저장소로 처리한다.
+#   (CHROME_USE_KEYRING=1 이면 시스템 키링을 그대로 사용)
+if ! has_flag --password-store "$@" && [ "${CHROME_USE_KEYRING:-0}" != "1" ]; then
+    EXTRA+=("--password-store=basic")
+fi
+
+# 첫 실행 안내 / 기본 브라우저 설정 배너 억제
+# (CHROME_SHOW_PROMPTS=1 이면 억제하지 않음)
+if [ "${CHROME_SHOW_PROMPTS:-0}" != "1" ]; then
+    has_flag --no-first-run "$@"             || EXTRA+=("--no-first-run")
+    has_flag --no-default-browser-check "$@" || EXTRA+=("--no-default-browser-check")
+fi
 
 # ── 샌드박스 선택 ─────────────────────────────────────────────────────────
 # 읽기전용 AppImage 에선 chrome-sandbox 를 SUID root 로 만들 수 없다.
