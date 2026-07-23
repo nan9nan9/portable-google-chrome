@@ -265,8 +265,9 @@ fi
 # stderr 에서 해당 라인만 정확히 걸러낸다. 나머지 로그는 그대로 출력된다.
 #   - UPower dbus: 전원/배터리 서비스(UPower) 미존재 시 1회성 dbus 에러
 #   - GCM: 푸시 메시징 등록의 DEPRECATED_ENDPOINT 응답 에러
+#   - NTP: 새 탭 열 때마다 반복되는 "chrome://newtab for incorrect profile type" 로그 스팸
 # (CHROME_QUIET=0 이면 필터하지 않고 원본 로그를 그대로 출력)
-QUIET_RE='org\.freedesktop\.UPower|gcm/engine/registration_request|Registration response error message: DEPRECATED_ENDPOINT'
+QUIET_RE='org\.freedesktop\.UPower|gcm/engine/registration_request|Registration response error message: DEPRECATED_ENDPOINT|Requested load of chrome://newtab/ for incorrect profile type'
 
 if [ "${CHROME_QUIET:-1}" = "1" ] && echo x | grep --line-buffered -q x 2>/dev/null; then
     # process substitution 으로 stderr 만 필터(원본 stderr 로 재출력). stdout 은 무변경.
