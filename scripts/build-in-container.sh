@@ -30,7 +30,9 @@ echo "    Chrome 버전: $CHROME_VER"
 # 원칙: glibc / GL / EGL / DRM / gbm / vulkan / wayland 등 호스트 하드웨어·드라이버·
 # 디스플레이 서버와 직접 통신하는 저수준 라이브러리는 번들에서 제외하고 호스트 것을 사용.
 # (Chrome 디렉토리에 이미 들어있는 자체 libEGL/libGLESv2(ANGLE) 등은 그대로 유지)
-EXCLUDE_RE='^(ld-linux-x86-64|libc|libm|libdl|libpthread|librt|libresolv|libutil|libnsl|libanl|libBrokenLocale|libGL|libGLX|libGLdispatch|libOpenGL|libEGL|libGLESv2|libgbm|libdrm|libvulkan|libwayland)\.'
+# 종결자를 [-._] 로 둬야 libwayland-client / libdrm_amdgpu / libGLX_mesa 같은
+# 접미사 변형까지 제외된다. (\. 로 끝내면 정확히 그 이름+"." 만 매칭해 변형을 놓침)
+EXCLUDE_RE='^(ld-linux-x86-64|libc|libm|libdl|libpthread|librt|libresolv|libutil|libnsl|libanl|libBrokenLocale|libGL|libGLX|libGLdispatch|libOpenGL|libEGL|libGLESv2|libglapi|libgbm|libdrm|libvulkan|libwayland)[-._]'
 
 echo "==> 의존성 목록 산출 (ldd 전이 폐쇄)"
 # ldd 는 전이 의존성을 평탄화해 모두 보여주므로 시드별 1회 호출로 충분하다.
@@ -209,6 +211,23 @@ fi
 if [ "${CHROME_SHOW_PROMPTS:-0}" != "1" ]; then
     has_flag --no-first-run "$@"             || EXTRA+=("--no-first-run")
     has_flag --no-default-browser-check "$@" || EXTRA+=("--no-default-browser-check")
+fi
+
+# ── GPU / GL 처리 ─────────────────────────────────────────────────────────
+# 포터블 실행 환경(헤드리스·VM·원격·일부 WSL 등)에는 동작하는 GL 드라이버가 없어
+# 호스트 libGL/ANGLE 초기화가 실패하고 다음과 같은 에러를 쏟아낸다:
+#   "libGL error: ... failed to open swrast", "ANGLE ... Could not create a backing
+#    OpenGL context", "eglInitialize ... failed".
+# 기본값으로 Chrome 에 번들된 SwiftShader(소프트웨어 GL)를 사용해 호스트 드라이버에
+# 의존하지 않고 조용히 렌더링한다. (WebGL 도 동작)
+#   CHROME_ENABLE_GPU=1  : 호스트 하드웨어 GPU 사용 (드라이버 정상인 데스크톱용)
+#   CHROME_DISABLE_GPU=1 : GPU 완전 비활성(--disable-gpu, 가장 가벼움 / WebGL 꺼짐)
+if [ "${CHROME_ENABLE_GPU:-0}" = "1" ]; then
+    :   # 호스트 GPU 사용: 아무 것도 주입하지 않음
+elif [ "${CHROME_DISABLE_GPU:-0}" = "1" ]; then
+    has_flag --disable-gpu "$@" || EXTRA+=("--disable-gpu")
+elif ! has_flag --use-angle "$@" && ! has_flag --use-gl "$@" && ! has_flag --disable-gpu "$@"; then
+    EXTRA+=("--use-angle=swiftshader" "--enable-unsafe-swiftshader")
 fi
 
 # ── 샌드박스 선택 ─────────────────────────────────────────────────────────

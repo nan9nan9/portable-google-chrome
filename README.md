@@ -67,6 +67,12 @@ chmod +x Google-Chrome-x86_64.AppImage
   - **첫 실행 안내 / 기본 브라우저 설정 배너 / 사용 통계 프롬프트** — `--no-first-run`,
     `--no-default-browser-check` 및 바이너리 옆 `initial_preferences`(기본 브라우저 설정 안 함,
     사용 통계 보고 비활성)로 억제. (원래 프롬프트를 보려면 `CHROME_SHOW_PROMPTS=1`)
+  - **GPU/GL 초기화 에러** — 포터블 실행 환경(헤드리스·VM·원격·일부 WSL 등)에는 동작하는
+    GL 드라이버가 없어 `libGL error: ... swrast`, `ANGLE ... Could not create a backing OpenGL
+    context`, `eglInitialize ... failed` 같은 에러가 쏟아집니다. Chrome 에 **번들된
+    SwiftShader(소프트웨어 GL)**를 기본 사용(`--use-angle=swiftshader`)해 호스트 드라이버에
+    의존하지 않고 조용히 렌더링합니다(WebGL 동작). 하드웨어 가속을 쓰려면
+    `CHROME_ENABLE_GPU=1`, GPU 를 완전히 끄려면 `CHROME_DISABLE_GPU=1`.
 
 ## 빌드 방법
 
@@ -101,6 +107,8 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 | `CHROME_USER_DATA_DIR=<경로>` | 포터블 프로필 위치 변경 (기본: AppImage 옆 `chrome-portable-data/`) |
 | `CHROME_USE_KEYRING=1` | 프로필 내부 저장소 대신 시스템 키링(GNOME Keyring/KWallet) 사용 |
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
+| `CHROME_ENABLE_GPU=1` | 소프트웨어 GL(SwiftShader) 대신 호스트 하드웨어 GPU 사용 |
+| `CHROME_DISABLE_GPU=1` | GPU 완전 비활성(`--disable-gpu`, 가장 가벼움 / WebGL 꺼짐) |
 | `CHROME_NO_SANDBOX=1` | 강제로 `--no-sandbox` 실행 (보안 저하, 문제 진단용) |
 | `--user-data-dir=<경로>` | 직접 지정하면 포터블 프로필 주입을 생략 (일반 Chrome 처럼 동작) |
 
