@@ -252,7 +252,21 @@ for a in "$@"; do
     case "$a" in --no-sandbox|--disable-setuid-sandbox|--sandbox) SANDBOX_ARG="";; esac
 done
 
-exec "$CHROME" ${SANDBOX_ARG:+"$SANDBOX_ARG"} "${EXTRA[@]}" "$@"
+# ── 무해한 시작 잡음 로그 필터 ────────────────────────────────────────────
+# 기능과 무관하지만 일부 환경에서 나오는 로그(딱 끄는 Chrome 플래그가 없음)를
+# stderr 에서 해당 라인만 정확히 걸러낸다. 나머지 로그는 그대로 출력된다.
+#   - UPower dbus: 전원/배터리 서비스(UPower) 미존재 시 1회성 dbus 에러
+#   - GCM: 푸시 메시징 등록의 DEPRECATED_ENDPOINT 응답 에러
+# (CHROME_QUIET=0 이면 필터하지 않고 원본 로그를 그대로 출력)
+QUIET_RE='org\.freedesktop\.UPower|gcm/engine/registration_request|Registration response error message: DEPRECATED_ENDPOINT'
+
+if [ "${CHROME_QUIET:-1}" = "1" ] && echo x | grep --line-buffered -q x 2>/dev/null; then
+    # process substitution 으로 stderr 만 필터(원본 stderr 로 재출력). stdout 은 무변경.
+    exec "$CHROME" ${SANDBOX_ARG:+"$SANDBOX_ARG"} "${EXTRA[@]}" "$@" \
+        2> >(grep --line-buffered -vE "$QUIET_RE" >&2)
+else
+    exec "$CHROME" ${SANDBOX_ARG:+"$SANDBOX_ARG"} "${EXTRA[@]}" "$@"
+fi
 APPRUN
 chmod +x "$APPDIR/AppRun"
 

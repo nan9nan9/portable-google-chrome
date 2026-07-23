@@ -73,6 +73,9 @@ chmod +x Google-Chrome-x86_64.AppImage
     SwiftShader(소프트웨어 GL)**를 기본 사용(`--use-angle=swiftshader`)해 호스트 드라이버에
     의존하지 않고 조용히 렌더링합니다(WebGL 동작). 하드웨어 가속을 쓰려면
     `CHROME_ENABLE_GPU=1`, GPU 를 완전히 끄려면 `CHROME_DISABLE_GPU=1`.
+  - **무해한 잡음 로그** — 기능과 무관하지만 일부 환경에서 나오는 로그(UPower dbus 에러,
+    GCM `DEPRECATED_ENDPOINT`)를 끄는 Chrome 플래그가 없어, AppRun 이 stderr 에서 해당
+    라인만 정확히 필터링합니다. 다른 로그는 그대로 보입니다. (원본을 보려면 `CHROME_QUIET=0`)
 
 ## 빌드 방법
 
@@ -109,6 +112,7 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
 | `CHROME_ENABLE_GPU=1` | 소프트웨어 GL(SwiftShader) 대신 호스트 하드웨어 GPU 사용 |
 | `CHROME_DISABLE_GPU=1` | GPU 완전 비활성(`--disable-gpu`, 가장 가벼움 / WebGL 꺼짐) |
+| `CHROME_QUIET=0` | 무해한 잡음 로그(UPower dbus / GCM) 필터를 끄고 원본 로그 그대로 출력 |
 | `CHROME_NO_SANDBOX=1` | 강제로 `--no-sandbox` 실행 (보안 저하, 문제 진단용) |
 | `--user-data-dir=<경로>` | 직접 지정하면 포터블 프로필 주입을 생략 (일반 Chrome 처럼 동작) |
 
