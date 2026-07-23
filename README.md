@@ -53,9 +53,12 @@ chmod +x Google-Chrome-x86_64.AppImage
   찾으므로, 디렉토리 구조(`opt/google/chrome/`)만 유지하면 됩니다. mate-terminal 처럼
   경로를 강제로 리다이렉트하는 LD_PRELOAD 후킹이 **필요 없습니다**.
 - **샌드박스**: 읽기전용 AppImage 안에서는 `chrome-sandbox` 를 SUID root 로 만들 수
-  없습니다. 그래서 **사용자 네임스페이스 샌드박스**(`--disable-setuid-sandbox`)를 사용해
-  보안을 유지합니다. 커널에서 사용자 네임스페이스가 비활성인 경우에만 부득이
-  `--no-sandbox` 로 폴백하며, 이때 경고를 출력합니다.
+  없습니다. 다행히 최신 Chrome 은 **사용자 네임스페이스**가 있으면 별도 플래그 없이도
+  네임스페이스 샌드박스를 자동 사용합니다. 그래서 **샌드박스 관련 플래그를 아무것도 넣지
+  않아** 보안(샌드박스 ON)을 유지하면서 화면 상단의 `"unsupported command-line flag:
+  --disable-setuid-sandbox"` 경고 인포바도 뜨지 않습니다. 커널에서 네임스페이스가 비활성인
+  경우에만 부득이 `--no-sandbox` 로 폴백하며, 이때 뜨는 경고 인포바는 `--test-type` 으로
+  억제합니다(샌드박스가 꺼지므로 보안 저하, 경고 메시지도 stderr 로 출력).
 - **포터블 프로필**: 실행 시 AppImage 파일이 있는 폴더에 `chrome-portable-data/` 를
   만들어 `--user-data-dir` 로 사용합니다. USB/공유폴더에 AppImage 를 두면 설정도 함께
   따라다닙니다.
@@ -71,8 +74,9 @@ chmod +x Google-Chrome-x86_64.AppImage
     GL 드라이버가 없어 `libGL error: ... swrast`, `ANGLE ... Could not create a backing OpenGL
     context`, `eglInitialize ... failed` 같은 에러가 쏟아집니다. Chrome 에 **번들된
     SwiftShader(소프트웨어 GL)**를 기본 사용(`--use-angle=swiftshader`)해 호스트 드라이버에
-    의존하지 않고 조용히 렌더링합니다(WebGL 동작). 하드웨어 가속을 쓰려면
-    `CHROME_ENABLE_GPU=1`, GPU 를 완전히 끄려면 `CHROME_DISABLE_GPU=1`.
+    의존하지 않고 조용히 렌더링합니다. (WebGL 소프트웨어 폴백은 Chrome 이 "unsafe" 경고
+    인포바를 띄우는 `--enable-unsafe-swiftshader` 가 필요해 기본에서 제외 — WebGL/하드웨어
+    가속이 필요하면 `CHROME_ENABLE_GPU=1`) GPU 를 완전히 끄려면 `CHROME_DISABLE_GPU=1`.
   - **무해한 잡음 로그** — 기능과 무관하지만 일부 환경에서 나오는 로그(UPower dbus 에러,
     GCM `DEPRECATED_ENDPOINT`)를 끄는 Chrome 플래그가 없어, AppRun 이 stderr 에서 해당
     라인만 정확히 필터링합니다. 다른 로그는 그대로 보입니다. (원본을 보려면 `CHROME_QUIET=0`)

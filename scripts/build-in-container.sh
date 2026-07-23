@@ -227,14 +227,21 @@ if [ "${CHROME_ENABLE_GPU:-0}" = "1" ]; then
 elif [ "${CHROME_DISABLE_GPU:-0}" = "1" ]; then
     has_flag --disable-gpu "$@" || EXTRA+=("--disable-gpu")
 elif ! has_flag --use-angle "$@" && ! has_flag --use-gl "$@" && ! has_flag --disable-gpu "$@"; then
-    EXTRA+=("--use-angle=swiftshader" "--enable-unsafe-swiftshader")
+    # SwiftShader 소프트웨어 GL 로 라우팅해 호스트 GL 부재 에러를 없앤다.
+    # (--enable-unsafe-swiftshader 는 WebGL 소프트웨어 폴백을 켜지만 Chrome 이 "unsafe"
+    #  경고 인포바를 띄우므로 넣지 않는다. WebGL 이 필요하면 CHROME_ENABLE_GPU=1)
+    EXTRA+=("--use-angle=swiftshader")
 fi
 
 # ── 샌드박스 선택 ─────────────────────────────────────────────────────────
-# 읽기전용 AppImage 에선 chrome-sandbox 를 SUID root 로 만들 수 없다.
-# → 사용자 네임스페이스 샌드박스를 사용(--disable-setuid-sandbox). 안전.
-# 네임스페이스가 비활성이면 부득이 --no-sandbox 로 폴백(보안 저하 경고).
-SANDBOX_ARG="--disable-setuid-sandbox"
+# 읽기전용 AppImage 에선 chrome-sandbox 를 SUID root 로 만들 수 없다. 그러나 최신
+# Chrome 은 "사용자 네임스페이스"가 있으면 별도 플래그 없이도 네임스페이스 샌드박스를
+# 자동 사용한다. → 이 경우 샌드박스 플래그를 아무것도 넣지 않는다.
+#   (예전엔 --disable-setuid-sandbox 를 넣었으나 Chrome 이 화면 상단에 "unsupported
+#    command-line flag: --disable-setuid-sandbox" 경고 인포바를 띄우므로 제거함)
+# 네임스페이스가 비활성인 커널에서만 부득이 --no-sandbox 로 폴백한다. 이때 뜨는 경고
+# 인포바는 --test-type 으로 억제한다. (샌드박스가 꺼지므로 보안은 저하)
+SANDBOX_ARGS=()
 userns_ok=1
 if [ -r /proc/sys/kernel/unprivileged_userns_clone ]; then
     [ "$(cat /proc/sys/kernel/unprivileged_userns_clone)" = "0" ] && userns_ok=0
@@ -242,15 +249,16 @@ fi
 if [ -r /proc/sys/user/max_user_namespaces ]; then
     [ "$(cat /proc/sys/user/max_user_namespaces)" = "0" ] && userns_ok=0
 fi
-if [ "$userns_ok" -eq 0 ]; then
-    SANDBOX_ARG="--no-sandbox"
-    echo "portable-chrome: 사용자 네임스페이스 비활성 → --no-sandbox 실행(보안 저하)" >&2
-fi
-[ "${CHROME_NO_SANDBOX:-0}" = "1" ] && SANDBOX_ARG="--no-sandbox"
-# 사용자가 이미 샌드박스 관련 플래그를 주면 우리 것은 생략
+# 사용자가 이미 샌드박스 관련 플래그를 직접 주면 우리는 관여하지 않는다.
+_user_sb=0
 for a in "$@"; do
-    case "$a" in --no-sandbox|--disable-setuid-sandbox|--sandbox) SANDBOX_ARG="";; esac
+    case "$a" in --no-sandbox|--disable-setuid-sandbox|--sandbox|--test-type) _user_sb=1;; esac
 done
+if [ "$_user_sb" -eq 0 ] && { [ "${CHROME_NO_SANDBOX:-0}" = "1" ] || [ "$userns_ok" -eq 0 ]; }; then
+    [ "$userns_ok" -eq 0 ] && echo "portable-chrome: 사용자 네임스페이스 비활성 → --no-sandbox 실행(보안 저하)" >&2
+    # --no-sandbox 경고 인포바는 --test-type 으로 억제
+    SANDBOX_ARGS=(--no-sandbox --test-type)
+fi
 
 # ── 무해한 시작 잡음 로그 필터 ────────────────────────────────────────────
 # 기능과 무관하지만 일부 환경에서 나오는 로그(딱 끄는 Chrome 플래그가 없음)를
@@ -262,10 +270,10 @@ QUIET_RE='org\.freedesktop\.UPower|gcm/engine/registration_request|Registration 
 
 if [ "${CHROME_QUIET:-1}" = "1" ] && echo x | grep --line-buffered -q x 2>/dev/null; then
     # process substitution 으로 stderr 만 필터(원본 stderr 로 재출력). stdout 은 무변경.
-    exec "$CHROME" ${SANDBOX_ARG:+"$SANDBOX_ARG"} "${EXTRA[@]}" "$@" \
+    exec "$CHROME" "${SANDBOX_ARGS[@]}" "${EXTRA[@]}" "$@" \
         2> >(grep --line-buffered -vE "$QUIET_RE" >&2)
 else
-    exec "$CHROME" ${SANDBOX_ARG:+"$SANDBOX_ARG"} "${EXTRA[@]}" "$@"
+    exec "$CHROME" "${SANDBOX_ARGS[@]}" "${EXTRA[@]}" "$@"
 fi
 APPRUN
 chmod +x "$APPDIR/AppRun"
