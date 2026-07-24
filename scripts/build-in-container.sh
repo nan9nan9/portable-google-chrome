@@ -216,7 +216,7 @@ fi
 if [ -n "${CHROME_USER_DATA_DIR:-}" ]; then
     DATA_DIR="$CHROME_USER_DATA_DIR"
 elif [ "${CHROME_DATA_IN_HOME:-0}" = "1" ]; then
-    DATA_DIR="${XDG_DATA_HOME:-$REAL_HOME/.local/share}/chrome-portable"
+    DATA_DIR="${XDG_CONFIG_HOME:-$REAL_HOME/.config}/portable-chrome"
 else
     DATA_DIR="$BASE_DIR/chrome-portable-data"
 fi

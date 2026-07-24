@@ -116,7 +116,7 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 | 항목 | 설명 |
 |------|------|
 | `CHROME_USER_DATA_DIR=<경로>` | 프로필 위치 직접 지정 (기본: AppImage 옆 `chrome-portable-data/`) |
-| `CHROME_DATA_IN_HOME=1` | 프로필을 **사용자 홈**(`~/.local/share/chrome-portable`)에 생성 (다인원 공유 배포용) |
+| `CHROME_DATA_IN_HOME=1` | 프로필을 **사용자 홈**(`~/.config/portable-chrome`)에 생성 (다인원 공유 배포용) |
 | `CHROME_CA_DIR=<디렉토리>` | CA 자동 등록 폴더 지정 (기본: AppImage 옆 `ca-certs/`) |
 | `CHROME_USE_KEYRING=1` | 프로필 내부 저장소 대신 시스템 키링(GNOME Keyring/KWallet) 사용 |
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
@@ -195,7 +195,7 @@ ca-certs/            ← 이 폴더에 사내 CA 를 넣어두면 자동 등록
 
 - **CA 는 공유 경로에서 자동으로**, **프로필(개인 데이터)은 각 사용자 홈에** 두는 구성:
   1. `ca-certs/` 에 사내 CA 를 넣어 AppImage 와 함께 배포
-  2. `CHROME_DATA_IN_HOME=1` 로 실행 → 프로필이 `~/.local/share/chrome-portable` 에 생성
+  2. `CHROME_DATA_IN_HOME=1` 로 실행 → 프로필이 `~/.config/portable-chrome` 에 생성
      (사용자마다 독립, `ca-certs/` 의 CA 는 각자 프로필에 자동 등록)
 
 ```bash
