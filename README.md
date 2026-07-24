@@ -77,9 +77,13 @@ chmod +x Google-Chrome-x86_64.AppImage
     의존하지 않고 조용히 렌더링합니다. (WebGL 소프트웨어 폴백은 Chrome 이 "unsafe" 경고
     인포바를 띄우는 `--enable-unsafe-swiftshader` 가 필요해 기본에서 제외 — WebGL/하드웨어
     가속이 필요하면 `CHROME_ENABLE_GPU=1`) GPU 를 완전히 끄려면 `CHROME_DISABLE_GPU=1`.
+  - **AI Mode** — 주소창/새 탭의 "AI Mode" 진입점(버튼·제안·스타터팩·사인인 프로모)을
+    `--disable-features`(AiModeOmniboxEntryPoint 등, 이 Chrome 바이너리에서 실제 추출한
+    feature 이름)로 끕니다. AI Mode 를 쓰려면 `CHROME_ENABLE_AI=1`.
   - **무해한 잡음 로그** — 기능과 무관하지만 일부 환경에서 나오는 로그(UPower dbus 에러,
-    GCM `DEPRECATED_ENDPOINT`)를 끄는 Chrome 플래그가 없어, AppRun 이 stderr 에서 해당
-    라인만 정확히 필터링합니다. 다른 로그는 그대로 보입니다. (원본을 보려면 `CHROME_QUIET=0`)
+    GCM `DEPRECATED_ENDPOINT`, 새 탭 `incorrect profile type`, mojo `rejected by interface
+    blink.mojom.*`)를 끄는 Chrome 플래그가 없어, AppRun 이 stderr 에서 해당 라인만 정확히
+    필터링합니다. 다른 로그는 그대로 보입니다. (원본을 보려면 `CHROME_QUIET=0`)
 
 ## 빌드 방법
 
@@ -116,7 +120,8 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
 | `CHROME_ENABLE_GPU=1` | 소프트웨어 GL(SwiftShader) 대신 호스트 하드웨어 GPU 사용 |
 | `CHROME_DISABLE_GPU=1` | GPU 완전 비활성(`--disable-gpu`, 가장 가벼움 / WebGL 꺼짐) |
-| `CHROME_QUIET=0` | 무해한 잡음 로그(UPower dbus / GCM) 필터를 끄고 원본 로그 그대로 출력 |
+| `CHROME_ENABLE_AI=1` | 기본으로 끄는 "AI Mode"(주소창/새 탭 진입점)를 끄지 않고 노출 |
+| `CHROME_QUIET=0` | 무해한 잡음 로그(UPower/GCM/NTP/mojo) 필터를 끄고 원본 로그 그대로 출력 |
 | `CHROME_NO_SANDBOX=1` | 강제로 `--no-sandbox` 실행 (보안 저하, 문제 진단용) |
 | `--user-data-dir=<경로>` | 직접 지정하면 포터블 프로필 주입을 생략 (일반 Chrome 처럼 동작) |
 

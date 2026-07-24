@@ -233,6 +233,15 @@ elif ! has_flag --use-angle "$@" && ! has_flag --use-gl "$@" && ! has_flag --dis
     EXTRA+=("--use-angle=swiftshader")
 fi
 
+# ── AI Mode 비활성 (기본) ─────────────────────────────────────────────────
+# 주소창/새 탭의 "AI Mode" 진입점(버튼·제안·스타터팩·사인인 프로모)을 끈다.
+# feature 이름은 이 Chrome 바이너리에서 실제 추출한 것. 알 수 없는 이름은 무시되므로 안전.
+#   CHROME_ENABLE_AI=1 : AI Mode 를 끄지 않음(그대로 노출)
+# 사용자가 직접 --disable-features/--enable-features 를 주면 덮어쓰지 않도록 관여하지 않는다.
+if [ "${CHROME_ENABLE_AI:-0}" != "1" ] && ! has_flag --disable-features "$@" && ! has_flag --enable-features "$@"; then
+    EXTRA+=("--disable-features=AiModeOmniboxEntryPoint,WebUIOmniboxDynamicAiModeButton,AllowAiModeMatches,AiModeEntryPointAlwaysNavigates,AiModeStartPack,EnableSearchAIModeSigninPromo")
+fi
+
 # ── 샌드박스 선택 ─────────────────────────────────────────────────────────
 # 읽기전용 AppImage 에선 chrome-sandbox 를 SUID root 로 만들 수 없다. 그러나 최신
 # Chrome 은 "사용자 네임스페이스"가 있으면 별도 플래그 없이도 네임스페이스 샌드박스를
@@ -266,8 +275,9 @@ fi
 #   - UPower dbus: 전원/배터리 서비스(UPower) 미존재 시 1회성 dbus 에러
 #   - GCM: 푸시 메시징 등록의 DEPRECATED_ENDPOINT 응답 에러
 #   - NTP: 새 탭 열 때마다 반복되는 "chrome://newtab for incorrect profile type" 로그 스팸
+#   - mojo: 렌더러 종료/전환 시 나오는 "Message N rejected by interface blink.mojom.*" 잡음
 # (CHROME_QUIET=0 이면 필터하지 않고 원본 로그를 그대로 출력)
-QUIET_RE='org\.freedesktop\.UPower|gcm/engine/registration_request|Registration response error message: DEPRECATED_ENDPOINT|Requested load of chrome://newtab/ for incorrect profile type'
+QUIET_RE='org\.freedesktop\.UPower|gcm/engine/registration_request|Registration response error message: DEPRECATED_ENDPOINT|Requested load of chrome://newtab/ for incorrect profile type|rejected by interface blink\.mojom'
 
 if [ "${CHROME_QUIET:-1}" = "1" ] && echo x | grep --line-buffered -q x 2>/dev/null; then
     # process substitution 으로 stderr 만 필터(원본 stderr 로 재출력). stdout 은 무변경.
