@@ -188,6 +188,7 @@ cat > "$APPDIR/AppRun" <<'APPRUN'
 set -e
 HERE="$(dirname "$(readlink -f "$0")")"
 CHROME="$HERE/opt/google/chrome/chrome"
+REAL_HOME="${HOME:-}"   # HOME 을 프로필로 돌리기 전, Firefox 프로필 탐색용 원래 홈 보관
 
 # 번들 라이브러리 우선 (호스트 저수준 라이브러리는 뒤쪽 기본 경로에서 해석)
 export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/opt/google/chrome${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -214,10 +215,16 @@ DATA_DIR="${CHROME_USER_DATA_DIR:-$BASE_DIR/chrome-portable-data}"
 # ── 사내/사설 루트 CA 신뢰 (선택) ─────────────────────────────────────────
 # 회사·학교 네트워크가 HTTPS 를 사설 CA 로 재서명(MITM)하면 Chrome 이 그 CA 를 몰라
 # net_error -202(ERR_CERT_AUTHORITY_INVALID)가 난다. (Firefox 는 자체 저장소라 통과)
-# CHROME_EXTRA_CA 에 사설 루트 CA 파일(PEM) 또는 그런 파일들이 든 디렉토리를 지정하면,
-# 번들된 certutil 로 "포터블 프로필 내부" NSS DB 에 등록해 Chrome 이 신뢰하게 한다.
+# 두 가지 방법으로 사설 CA 를 "포터블 프로필 내부" NSS DB 에 등록해 Chrome 이 신뢰하게 한다.
+#   CHROME_IMPORT_FIREFOX_CA=auto  : Firefox 신뢰 저장소(cert9.db)의 CA 를 자동으로 가져옴
+#        (또는 =<firefox 프로필 경로> 로 직접 지정) — Firefox 는 되는데 Chrome 만 안 될 때 편리
+#   CHROME_EXTRA_CA=<파일|디렉토리> : PEM/CRT 파일을 직접 등록
 # 등록 정보가 프로필과 함께 이동하도록, 이 경우 HOME 을 프로필로 돌려 $HOME/.pki/nssdb 사용.
-if [ -n "${CHROME_EXTRA_CA:-}" ] || [ -d "$DATA_DIR/.pki/nssdb" ]; then
+_ca_active=0
+[ -n "${CHROME_EXTRA_CA:-}" ] && _ca_active=1
+[ -n "${CHROME_IMPORT_FIREFOX_CA:-}" ] && _ca_active=1
+[ -d "$DATA_DIR/.pki/nssdb" ] && _ca_active=1
+if [ "$_ca_active" = "1" ]; then
     export HOME="$DATA_DIR"
     NSSDB="$HOME/.pki/nssdb"
     CU="$HERE/usr/bin/certutil"
@@ -225,6 +232,41 @@ if [ -n "${CHROME_EXTRA_CA:-}" ] || [ -d "$DATA_DIR/.pki/nssdb" ]; then
     if [ ! -f "$NSSDB/cert9.db" ] && [ -x "$CU" ]; then
         "$CU" -d "sql:$NSSDB" -N --empty-password >/dev/null 2>&1 || true
     fi
+
+    # (1) Firefox 신뢰 저장소에서 CA 가져오기
+    if [ -n "${CHROME_IMPORT_FIREFOX_CA:-}" ] && [ -x "$CU" ]; then
+        _ff_dirs=""
+        case "$CHROME_IMPORT_FIREFOX_CA" in
+            1|auto|AUTO|yes|on)
+                for r in "$REAL_HOME/.mozilla/firefox" \
+                         "$REAL_HOME/snap/firefox/common/.mozilla/firefox" \
+                         "$REAL_HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"; do
+                    [ -d "$r" ] || continue
+                    while IFS= read -r d; do _ff_dirs="$_ff_dirs
+$d"; done < <(find "$r" -maxdepth 2 -name cert9.db -printf '%h\n' 2>/dev/null)
+                done ;;
+            *) _ff_dirs="$CHROME_IMPORT_FIREFOX_CA" ;;   # Firefox 프로필 경로 직접 지정
+        esac
+        printf '%s\n' "$_ff_dirs" | while IFS= read -r ffp; do
+            { [ -n "$ffp" ] && [ -f "$ffp/cert9.db" ]; } || continue
+            # SSL 로 신뢰된 CA(트러스트 첫 필드에 C/T)만 골라 닉네임 추출
+            # certutil -L 은 트러스트 뒤에 trailing 공백을 붙이므로 먼저 제거해야 닉네임이 정확.
+            "$CU" -d "sql:$ffp" -L 2>/dev/null | awk '
+                { line=$0; sub(/[ \t]+$/,"",line); n=split(line,f,/[ \t]+/); t=f[n];
+                  if (t ~ /,/) { split(t,a,","); if (a[1] ~ /[CT]/) {
+                      nick=line; sub(/[ \t]+[^ \t]+$/,"",nick); if (length(nick)) print nick } } }' \
+            | while IFS= read -r nick; do
+                "$CU" -d "sql:$ffp" -L -n "$nick" -a > "$NSSDB/.ffca.pem" 2>/dev/null || continue
+                "$CU" -d "sql:$NSSDB" -D -n "ffca:$nick" >/dev/null 2>&1 || true
+                if "$CU" -d "sql:$NSSDB" -A -t "C,," -n "ffca:$nick" -i "$NSSDB/.ffca.pem" >/dev/null 2>&1; then
+                    echo "portable-chrome: Firefox CA 등록 → $nick" >&2
+                fi
+            done
+        done
+        rm -f "$NSSDB/.ffca.pem" 2>/dev/null || true
+    fi
+
+    # (2) 파일/디렉토리로 직접 지정한 CA 등록
     if [ -n "${CHROME_EXTRA_CA:-}" ] && [ -x "$CU" ]; then
         _import_ca() {
             local f="$1" nick

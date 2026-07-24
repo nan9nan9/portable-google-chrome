@@ -120,6 +120,7 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
 | `CHROME_ENABLE_GPU=1` | 소프트웨어 GL(SwiftShader) 대신 호스트 하드웨어 GPU 사용 |
 | `CHROME_DISABLE_GPU=1` | GPU 완전 비활성(`--disable-gpu`, 가장 가벼움 / WebGL 꺼짐) |
+| `CHROME_IMPORT_FIREFOX_CA=auto` | Firefox 신뢰 저장소(cert9.db)의 CA 를 자동으로 가져와 신뢰 (아래 참고) |
 | `CHROME_EXTRA_CA=<파일\|디렉토리>` | 사내/사설 루트 CA(PEM)를 포터블 프로필에 등록해 신뢰 (아래 참고) |
 | `CHROME_ENABLE_AI=1` | 기본으로 끄는 "AI Mode"(주소창/새 탭 진입점)를 끄지 않고 노출 |
 | `CHROME_QUIET=0` | 무해한 잡음 로그(UPower/GCM/NTP/mojo) 필터를 끄고 원본 로그 그대로 출력 |
@@ -138,8 +139,24 @@ Chrome 은 그 CA 를 신뢰하지 않아 모든/일부 HTTPS 에서
 `ERR_CERT_AUTHORITY_INVALID`(`handshake failed ... net_error -202`)가 납니다.
 Firefox 는 자체 CA 저장소를 써서 통과하지만, Chrome 은 시스템/사용자 신뢰 저장소를 봅니다.
 
-**해결:** 사내 루트 CA 파일(PEM)을 `CHROME_EXTRA_CA` 로 지정하면, 번들된 `certutil` 이
-**포터블 프로필 내부 NSS DB** 에 등록해 Chrome 이 신뢰합니다. (등록 정보가 프로필과 함께 이동)
+번들된 `certutil` 이 사내 CA 를 **포터블 프로필 내부 NSS DB** 에 등록해 Chrome 이 신뢰하게
+합니다. (등록 정보가 프로필과 함께 이동) 두 가지 방법이 있습니다.
+
+**방법 A — Firefox 설정을 그대로 참고 (가장 간단, Firefox 는 되는데 Chrome 만 안 될 때):**
+Firefox 의 신뢰 저장소(`cert9.db`)에서 CA 를 자동으로 가져옵니다. 별도 파일 준비가 필요 없습니다.
+
+```bash
+CHROME_IMPORT_FIREFOX_CA=auto ./Google-Chrome-x86_64.AppImage
+# 프로필 위치를 직접 지정할 수도 있음:
+CHROME_IMPORT_FIREFOX_CA="$HOME/.mozilla/firefox/xxxx.default-release" ./Google-Chrome-x86_64.AppImage
+```
+
+`auto` 는 `~/.mozilla/firefox`, snap/flatpak Firefox 경로를 뒤져 SSL 로 신뢰된 CA 를 모두
+가져옵니다. 실행 시 `portable-chrome: Firefox CA 등록 → <이름>` 로그가 뜨면 성공입니다.
+(참고: Firefox 가 사내 CA 를 OS "엔터프라이즈 루트"에서만 읽고 자체 저장소에 없으면 이 방법으로는
+안 잡힙니다 — 이때는 방법 B 를 쓰세요.)
+
+**방법 B — CA 파일(PEM)을 직접 지정:**
 
 ```bash
 # 파일 하나 지정 (PEM)
@@ -148,12 +165,12 @@ CHROME_EXTRA_CA=/path/to/corp-root-ca.pem ./Google-Chrome-x86_64.AppImage
 CHROME_EXTRA_CA=/path/to/ca-dir ./Google-Chrome-x86_64.AppImage
 ```
 
-한 번 등록되면 프로필(`chrome-portable-data/`)에 남으므로 다음부터는 환경변수 없이 실행해도
-계속 신뢰됩니다.
-
-**사내 CA 파일 구하는 법** — IT 부서에서 받거나, 이미 되는 Firefox 에서 내보내기:
+**CA 파일 구하는 법** — IT 부서에서 받거나, Firefox 에서 내보내기:
 Firefox → 설정 → 개인정보 및 보안 → 인증서 → **인증서 보기** → **인증기관(Authorities)** 탭 →
 사내 CA 선택 → **내보내기** → `.pem`(또는 `.crt`) 저장.
+
+두 방법 모두 한 번 등록되면 프로필(`chrome-portable-data/`)에 남아, 다음부터는 환경변수 없이
+실행해도 계속 신뢰됩니다.
 
 > 참고: 특정 사이트에서만 -202 가 나고 발급 기관이 Entrust 등 정상 CA 라면, Chrome 이
 > 해당 CA 를 정책적으로 불신하는 경우로 정품 Chrome 도 동일하게 거부합니다(사내 CA 문제 아님).
