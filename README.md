@@ -115,7 +115,9 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 
 | 항목 | 설명 |
 |------|------|
-| `CHROME_USER_DATA_DIR=<경로>` | 포터블 프로필 위치 변경 (기본: AppImage 옆 `chrome-portable-data/`) |
+| `CHROME_USER_DATA_DIR=<경로>` | 프로필 위치 직접 지정 (기본: AppImage 옆 `chrome-portable-data/`) |
+| `CHROME_DATA_IN_HOME=1` | 프로필을 **사용자 홈**(`~/.local/share/chrome-portable`)에 생성 (다인원 공유 배포용) |
+| `CHROME_CA_DIR=<디렉토리>` | CA 자동 등록 폴더 지정 (기본: AppImage 옆 `ca-certs/`) |
 | `CHROME_USE_KEYRING=1` | 프로필 내부 저장소 대신 시스템 키링(GNOME Keyring/KWallet) 사용 |
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
 | `CHROME_ENABLE_GPU=1` | 소프트웨어 GL(SwiftShader) 대신 호스트 하드웨어 GPU 사용 |
@@ -172,10 +174,39 @@ Firefox → 설정 → 개인정보 및 보안 → 인증서 → **인증서 보
 두 방법 모두 한 번 등록되면 프로필(`chrome-portable-data/`)에 남아, 다음부터는 환경변수 없이
 실행해도 계속 신뢰됩니다.
 
+**방법 C — CA 폴더 자동 등록 (env 불필요, 다인원 배포에 적합):**
+AppImage 옆에 **`ca-certs/`** 폴더를 만들고 사내 CA 파일을 넣어두면, 실행할 때마다 자동으로
+등록됩니다. 환경변수가 필요 없습니다.
+
+```
+Google-Chrome-x86_64.AppImage
+ca-certs/            ← 이 폴더에 사내 CA 를 넣어두면 자동 등록
+  ├─ corp-root.crt
+  └─ corp-inter.crt
+```
+(경로를 바꾸려면 `CHROME_CA_DIR=<폴더>`)
+
 **지원 형식:** PEM, **DER(바이너리 `.crt`/`.cer`/`.der`)**, 여러 인증서가 든 **번들 PEM**(자동 분할),
 `-----BEGIN` 앞에 잡텍스트(`Bag Attributes` 등)가 있는 PEM 모두 자동 처리합니다. 실행 시 stderr 에
 `portable-chrome: CA 등록 → <이름>` 과 `... CA 등록 누계 = N` 이 찍히니 N 이 1 이상인지 확인하세요.
 등록 실패 시 `CA 등록 실패 → ... : <원인>` 으로 certutil 오류를 그대로 보여줍니다.
+
+### 사내 다인원 배포 (CA 공유 + 프로필은 사용자별)
+
+- **CA 는 공유 경로에서 자동으로**, **프로필(개인 데이터)은 각 사용자 홈에** 두는 구성:
+  1. `ca-certs/` 에 사내 CA 를 넣어 AppImage 와 함께 배포
+  2. `CHROME_DATA_IN_HOME=1` 로 실행 → 프로필이 `~/.local/share/chrome-portable` 에 생성
+     (사용자마다 독립, `ca-certs/` 의 CA 는 각자 프로필에 자동 등록)
+
+```bash
+CHROME_DATA_IN_HOME=1 ./Google-Chrome-x86_64.AppImage
+```
+
+- **프로필 위치는 AppImage 파일이 있는 폴더 기준**입니다(OS 계정별 아님). 그래서 공유 드라이브에
+  AppImage 하나만 두고 여러 명이 기본값으로 실행하면 **같은 프로필을 공유**해 충돌·프라이버시
+  문제가 생깁니다 → 이때 `CHROME_DATA_IN_HOME=1`(또는 `CHROME_USER_DATA_DIR`)로 분리하세요.
+- 간단히는, CA 까지 등록해둔 `chrome-portable-data/` 를 AppImage 와 함께 **각 사용자 폴더로 복사**해도
+  됩니다(각자 독립 프로필 + CA 포함).
 
 > 예전 버전에서 CA 등록이 실패했었다면 프로필의 `chrome-portable-data/.pki` 를 한 번 지우고
 > 다시 시도하세요(손상된 항목 제거).

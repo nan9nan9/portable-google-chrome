@@ -204,13 +204,26 @@ if [ -f "$PIXBUF_CACHE" ]; then
     trap 'rm -rf "$RT"' EXIT
 fi
 
-# ── 포터블 프로필: AppImage 파일과 같은 폴더에 데이터를 두어 함께 이동 ──────
+# ── 프로필(사용자 데이터) 위치 결정 ───────────────────────────────────────
 if [ -n "${APPIMAGE:-}" ]; then
-    BASE_DIR="$(dirname "$APPIMAGE")"
+    BASE_DIR="$(dirname "$APPIMAGE")"   # AppImage 파일이 있는 폴더
 else
-    BASE_DIR="$HERE"          # 추출(extract) 실행 시엔 AppDir 기준
+    BASE_DIR="$HERE"                    # 추출(extract) 실행 시엔 AppDir 기준
 fi
-DATA_DIR="${CHROME_USER_DATA_DIR:-$BASE_DIR/chrome-portable-data}"
+# 우선순위: CHROME_USER_DATA_DIR > (CHROME_DATA_IN_HOME=1 → 사용자 홈) > AppImage 옆
+#  - 기본: AppImage 옆 chrome-portable-data (파일과 함께 이동하는 포터블 방식)
+#  - CHROME_DATA_IN_HOME=1: 사용자 홈에 생성 → 공유 AppImage 를 여러 사용자가 각자 프로필로 사용
+if [ -n "${CHROME_USER_DATA_DIR:-}" ]; then
+    DATA_DIR="$CHROME_USER_DATA_DIR"
+elif [ "${CHROME_DATA_IN_HOME:-0}" = "1" ]; then
+    DATA_DIR="${XDG_DATA_HOME:-$REAL_HOME/.local/share}/chrome-portable"
+else
+    DATA_DIR="$BASE_DIR/chrome-portable-data"
+fi
+
+# CA 기본 경로: AppImage 옆 ca-certs/ 에 CA 파일을 두면 env 없이도 자동 등록된다.
+# (관리자가 사내 CA 를 여기 넣어 배포 → 모든 사용자가 각자 프로필에 자동 신뢰)
+CA_DIR="${CHROME_CA_DIR:-$BASE_DIR/ca-certs}"
 
 # ── 사내/사설 루트 CA 신뢰 (선택) ─────────────────────────────────────────
 # 회사·학교 네트워크가 HTTPS 를 사설 CA 로 재서명(MITM)하면 Chrome 이 그 CA 를 몰라
@@ -219,10 +232,12 @@ DATA_DIR="${CHROME_USER_DATA_DIR:-$BASE_DIR/chrome-portable-data}"
 #   CHROME_IMPORT_FIREFOX_CA=auto  : Firefox 신뢰 저장소(cert9.db)의 CA 를 자동으로 가져옴
 #        (또는 =<firefox 프로필 경로> 로 직접 지정) — Firefox 는 되는데 Chrome 만 안 될 때 편리
 #   CHROME_EXTRA_CA=<파일|디렉토리> : PEM/CRT 파일을 직접 등록
-# 등록 정보가 프로필과 함께 이동하도록, 이 경우 HOME 을 프로필로 돌려 $HOME/.pki/nssdb 사용.
+#   ca-certs/ 기본 경로($CA_DIR) : 폴더가 있으면 그 안 CA 를 자동 등록(env 불필요)
+# 등록은 현재 프로필의 NSS DB 에 저장. HOME 을 프로필로 돌려 $HOME/.pki/nssdb 를 쓰게 한다.
 _ca_active=0
 [ -n "${CHROME_EXTRA_CA:-}" ] && _ca_active=1
 [ -n "${CHROME_IMPORT_FIREFOX_CA:-}" ] && _ca_active=1
+[ -d "$CA_DIR" ] && _ca_active=1
 [ -d "$DATA_DIR/.pki/nssdb" ] && _ca_active=1
 if [ "$_ca_active" = "1" ]; then
     export HOME="$DATA_DIR"
@@ -267,6 +282,13 @@ if [ "$_ca_active" = "1" ]; then
             _add_one "$src" "$pfx" 0    # DER(바이너리) 한 개로 간주
         fi
     }
+
+    # (0) 기본 CA 경로(ca-certs/)에서 자동 등록 — env 없이 동작
+    if [ -d "$CA_DIR" ] && [ -x "$CU" ]; then
+        for f in "$CA_DIR"/*.pem "$CA_DIR"/*.crt "$CA_DIR"/*.cer "$CA_DIR"/*.der; do
+            [ -e "$f" ] && _add_cert_file "$f" "cadir-$(basename "$f")"
+        done
+    fi
 
     # (1) Firefox 신뢰 저장소에서 CA 가져오기
     if [ -n "${CHROME_IMPORT_FIREFOX_CA:-}" ] && [ -x "$CU" ]; then
