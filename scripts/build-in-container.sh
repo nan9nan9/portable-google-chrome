@@ -233,6 +233,41 @@ if [ "$_ca_active" = "1" ]; then
         "$CU" -d "sql:$NSSDB" -N --empty-password >/dev/null 2>&1 || true
     fi
 
+    # 인증서 파일 등록 헬퍼: PEM/DER 자동판별, PEM 번들은 분할, 실제 certutil 오류 표시
+    CU_ERR="${TMPDIR:-/tmp}/pc-cu-$$.err"
+    _CA_OK=0
+    _add_one() {   # $1=인증서파일 $2=닉네임 $3=1이면 PEM(-a 필요)
+        local f="$1" nick="$2" aflag=""
+        [ "$3" = "1" ] && aflag="-a"
+        "$CU" -d "sql:$NSSDB" -D -n "$nick" >/dev/null 2>&1 || true
+        if "$CU" -d "sql:$NSSDB" -A $aflag -t "C,," -n "$nick" -i "$f" 2>"$CU_ERR"; then
+            echo "portable-chrome: CA 등록 → $nick" >&2
+            _CA_OK=$((_CA_OK+1))
+        else
+            echo "portable-chrome: CA 등록 실패 → $nick : $(tr '\n' ' ' < "$CU_ERR" 2>/dev/null)" >&2
+        fi
+    }
+    _add_cert_file() {   # $1=파일(PEM 단일/번들 또는 DER) $2=닉네임 접두
+        local src="$1" pfx="$2" tmpd pem i=0
+        [ -s "$src" ] || { echo "portable-chrome: 빈/없는 CA 파일 무시 → $src" >&2; return 0; }
+        if grep -q -- "-----BEGIN CERTIFICATE-----" "$src" 2>/dev/null; then
+            # PEM: 개별 인증서로 분할(-----BEGIN 이전 잡텍스트 자동 제거). 번들이면 여러 개.
+            tmpd="$(mktemp -d 2>/dev/null || printf '%s' "$NSSDB/.split.$$")"
+            mkdir -p "$tmpd"
+            awk -v d="$tmpd" '
+                /-----BEGIN CERTIFICATE-----/{n++; f=sprintf("%s/c%03d.pem", d, n)}
+                n>0{print > f}
+                /-----END CERTIFICATE-----/{if (f) close(f)}' "$src"
+            for pem in "$tmpd"/c*.pem; do
+                [ -e "$pem" ] || continue
+                i=$((i+1)); _add_one "$pem" "$pfx#$i" 1
+            done
+            rm -rf "$tmpd"
+        else
+            _add_one "$src" "$pfx" 0    # DER(바이너리) 한 개로 간주
+        fi
+    }
+
     # (1) Firefox 신뢰 저장소에서 CA 가져오기
     if [ -n "${CHROME_IMPORT_FIREFOX_CA:-}" ] && [ -x "$CU" ]; then
         _ff_dirs=""
@@ -247,47 +282,43 @@ $d"; done < <(find "$r" -maxdepth 2 -name cert9.db -printf '%h\n' 2>/dev/null)
                 done ;;
             *) _ff_dirs="$CHROME_IMPORT_FIREFOX_CA" ;;   # Firefox 프로필 경로 직접 지정
         esac
-        printf '%s\n' "$_ff_dirs" | while IFS= read -r ffp; do
+        _ff_found=0
+        # 프로세스 치환(< <(...))으로 서브셸을 피해 카운터가 유지되게 함
+        while IFS= read -r ffp; do
             { [ -n "$ffp" ] && [ -f "$ffp/cert9.db" ]; } || continue
+            _ff_found=$((_ff_found+1))
+            echo "portable-chrome: Firefox 프로필 검사 → $ffp" >&2
             # SSL 로 신뢰된 CA(트러스트 첫 필드에 C/T)만 골라 닉네임 추출
-            # certutil -L 은 트러스트 뒤에 trailing 공백을 붙이므로 먼저 제거해야 닉네임이 정확.
-            "$CU" -d "sql:$ffp" -L 2>/dev/null | awk '
-                { line=$0; sub(/[ \t]+$/,"",line); n=split(line,f,/[ \t]+/); t=f[n];
-                  if (t ~ /,/) { split(t,a,","); if (a[1] ~ /[CT]/) {
-                      nick=line; sub(/[ \t]+[^ \t]+$/,"",nick); if (length(nick)) print nick } } }' \
-            | while IFS= read -r nick; do
-                "$CU" -d "sql:$ffp" -L -n "$nick" -a > "$NSSDB/.ffca.pem" 2>/dev/null || continue
-                "$CU" -d "sql:$NSSDB" -D -n "ffca:$nick" >/dev/null 2>&1 || true
-                if "$CU" -d "sql:$NSSDB" -A -t "C,," -n "ffca:$nick" -i "$NSSDB/.ffca.pem" >/dev/null 2>&1; then
-                    echo "portable-chrome: Firefox CA 등록 → $nick" >&2
+            # certutil -L 은 트러스트 뒤 trailing 공백을 붙이므로 먼저 제거해야 닉네임 정확.
+            while IFS= read -r nick; do
+                [ -n "$nick" ] || continue
+                if "$CU" -d "sql:$ffp" -L -n "$nick" -a > "$NSSDB/.ffca.pem" 2>/dev/null; then
+                    _add_cert_file "$NSSDB/.ffca.pem" "ffca:$nick"
                 fi
-            done
-        done
+            done < <("$CU" -d "sql:$ffp" -L 2>/dev/null | awk '
+                { line=$0; sub(/[ \t]+$/,"",line); m=split(line,f,/[ \t]+/); t=f[m];
+                  if (t ~ /,/) { split(t,a,","); if (a[1] ~ /[CT]/) {
+                      nick=line; sub(/[ \t]+[^ \t]+$/,"",nick); if (length(nick)) print nick } } }')
+        done < <(printf '%s\n' "$_ff_dirs")
         rm -f "$NSSDB/.ffca.pem" 2>/dev/null || true
+        [ "$_ff_found" = "0" ] && echo "portable-chrome: Firefox 프로필(cert9.db)을 찾지 못함 — 경로 직접 지정 또는 CHROME_EXTRA_CA 사용" >&2
     fi
 
     # (2) 파일/디렉토리로 직접 지정한 CA 등록
     if [ -n "${CHROME_EXTRA_CA:-}" ] && [ -x "$CU" ]; then
-        _import_ca() {
-            local f="$1" nick
-            nick="portable-ca-$(basename "$f")"
-            "$CU" -d "sql:$NSSDB" -D -n "$nick" >/dev/null 2>&1 || true
-            if "$CU" -d "sql:$NSSDB" -A -t "C,," -n "$nick" -i "$f" >/dev/null 2>&1; then
-                echo "portable-chrome: 사설 CA 등록됨 → $f" >&2
-            else
-                echo "portable-chrome: 사설 CA 등록 실패(PEM 형식 확인) → $f" >&2
-            fi
-        }
         if [ -d "$CHROME_EXTRA_CA" ]; then
-            for f in "$CHROME_EXTRA_CA"/*.pem "$CHROME_EXTRA_CA"/*.crt "$CHROME_EXTRA_CA"/*.cer; do
-                [ -e "$f" ] && _import_ca "$f"
+            for f in "$CHROME_EXTRA_CA"/*.pem "$CHROME_EXTRA_CA"/*.crt "$CHROME_EXTRA_CA"/*.cer "$CHROME_EXTRA_CA"/*.der; do
+                [ -e "$f" ] && _add_cert_file "$f" "portable-ca-$(basename "$f")"
             done
         elif [ -f "$CHROME_EXTRA_CA" ]; then
-            _import_ca "$CHROME_EXTRA_CA"
+            _add_cert_file "$CHROME_EXTRA_CA" "portable-ca-$(basename "$CHROME_EXTRA_CA")"
         else
             echo "portable-chrome: CHROME_EXTRA_CA 경로를 찾을 수 없음 → $CHROME_EXTRA_CA" >&2
         fi
     fi
+
+    rm -f "$CU_ERR" 2>/dev/null || true
+    echo "portable-chrome: 신뢰 저장소 CA 등록 누계 = $_CA_OK" >&2
 fi
 
 # 사용자가 이미 준 플래그는 중복 주입하지 않는다
