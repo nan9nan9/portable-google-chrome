@@ -210,12 +210,14 @@ if [ -n "${APPIMAGE:-}" ]; then
 else
     BASE_DIR="$HERE"                    # 추출(extract) 실행 시엔 AppDir 기준
 fi
-# 우선순위: CHROME_USER_DATA_DIR > (CHROME_DATA_IN_HOME=1 → 사용자 홈) > AppImage 옆
-#  - 기본: AppImage 옆 chrome-portable-data (파일과 함께 이동하는 포터블 방식)
-#  - CHROME_DATA_IN_HOME=1: 사용자 홈에 생성 → 공유 AppImage 를 여러 사용자가 각자 프로필로 사용
+# 우선순위: CHROME_USER_DATA_DIR > (기본: 사용자 홈) > (CHROME_DATA_IN_HOME=0 → AppImage 옆)
+#  - 기본값: 사용자 홈 $HOME/.config/portable-chrome (사용자별 독립 프로필)
+#  - CHROME_DATA_IN_HOME=0: AppImage 옆 chrome-portable-data (파일과 함께 이동하는 포터블 방식)
+#  - HOME 을 알 수 없으면 안전하게 AppImage 옆으로 폴백
+_dih="${CHROME_DATA_IN_HOME:-1}"
 if [ -n "${CHROME_USER_DATA_DIR:-}" ]; then
     DATA_DIR="$CHROME_USER_DATA_DIR"
-elif [ "${CHROME_DATA_IN_HOME:-0}" = "1" ]; then
+elif [ "$_dih" != "0" ] && [ -n "$REAL_HOME" ]; then
     DATA_DIR="${XDG_CONFIG_HOME:-$REAL_HOME/.config}/portable-chrome"
 else
     DATA_DIR="$BASE_DIR/chrome-portable-data"

@@ -6,8 +6,9 @@
 [![glibc](https://img.shields.io/badge/glibc-%E2%89%A5%202.28%20(RHEL8%2FCentOS8%2FDebian10)-green)](#동작-원리)
 
 설치 없이 실행 가능한 `google-chrome-stable` 포터블 빌드입니다.
-파일 하나(AppImage)만 복사하면 대부분의 최신 x86_64 리눅스에서 바로 실행되고,
-프로필(설정·확장·로그인)은 AppImage 파일 옆 폴더에 저장되어 **함께 이동**합니다.
+파일 하나(AppImage)만 복사하면 대부분의 최신 x86_64 리눅스에서 바로 실행됩니다.
+프로필(설정·확장·로그인)은 기본적으로 **사용자 홈 `~/.config/portable-chrome`** 에 저장되어
+계정별로 독립적입니다. (AppImage 파일 옆에 두어 함께 이동시키려면 `CHROME_DATA_IN_HOME=0`)
 
 > [`MATE_TERMINAL_README.md`](./MATE_TERMINAL_README.md) 의 AppImage 패키징 방식을
 > Chrome 특성에 맞게 재설계한 프로젝트입니다.
@@ -59,9 +60,10 @@ chmod +x Google-Chrome-x86_64.AppImage
   --disable-setuid-sandbox"` 경고 인포바도 뜨지 않습니다. 커널에서 네임스페이스가 비활성인
   경우에만 부득이 `--no-sandbox` 로 폴백하며, 이때 뜨는 경고 인포바는 `--test-type` 으로
   억제합니다(샌드박스가 꺼지므로 보안 저하, 경고 메시지도 stderr 로 출력).
-- **포터블 프로필**: 실행 시 AppImage 파일이 있는 폴더에 `chrome-portable-data/` 를
-  만들어 `--user-data-dir` 로 사용합니다. USB/공유폴더에 AppImage 를 두면 설정도 함께
-  따라다닙니다.
+- **프로필 위치**: 기본은 **사용자 홈 `~/.config/portable-chrome`**(계정별 독립). 공유
+  드라이브에 AppImage 하나만 두고 여러 명이 써도 프로필이 충돌하지 않습니다. AppImage 파일과
+  함께 이동하는 포터블 방식을 원하면 `CHROME_DATA_IN_HOME=0`(→ AppImage 옆 `chrome-portable-data/`),
+  경로를 직접 지정하려면 `CHROME_USER_DATA_DIR=<경로>`.
 - **방해 요소 제거(기본값)**: 포터블 환경에 맞게 아래를 기본으로 끕니다.
   - **시스템 키링 잠금해제 팝업** — 비밀번호/쿠키 암호화를 OS 키링(GNOME Keyring/KWallet)
     대신 프로필 내부 `basic` 저장소로 처리(`--password-store=basic`). "Unlock Login Keyring"
@@ -115,8 +117,8 @@ FUSE 가 없는 환경(일부 폐쇄망/컨테이너)에서는 추출 후 실행
 
 | 항목 | 설명 |
 |------|------|
-| `CHROME_USER_DATA_DIR=<경로>` | 프로필 위치 직접 지정 (기본: AppImage 옆 `chrome-portable-data/`) |
-| `CHROME_DATA_IN_HOME=1` | 프로필을 **사용자 홈**(`~/.config/portable-chrome`)에 생성 (다인원 공유 배포용) |
+| `CHROME_USER_DATA_DIR=<경로>` | 프로필 위치 직접 지정 (최우선) |
+| `CHROME_DATA_IN_HOME=0` | 프로필을 홈 대신 **AppImage 옆 `chrome-portable-data/`** 에 저장(파일과 함께 이동). 기본값은 홈(`~/.config/portable-chrome`) |
 | `CHROME_CA_DIR=<디렉토리>` | CA 자동 등록 폴더 지정 (기본: AppImage 옆 `ca-certs/`) |
 | `CHROME_USE_KEYRING=1` | 프로필 내부 저장소 대신 시스템 키링(GNOME Keyring/KWallet) 사용 |
 | `CHROME_SHOW_PROMPTS=1` | 첫 실행 안내·기본 브라우저 설정 프롬프트 억제 해제 |
@@ -193,18 +195,18 @@ ca-certs/            ← 이 폴더에 사내 CA 를 넣어두면 자동 등록
 
 ### 사내 다인원 배포 (CA 공유 + 프로필은 사용자별)
 
-- **CA 는 공유 경로에서 자동으로**, **프로필(개인 데이터)은 각 사용자 홈에** 두는 구성:
-  1. `ca-certs/` 에 사내 CA 를 넣어 AppImage 와 함께 배포
-  2. `CHROME_DATA_IN_HOME=1` 로 실행 → 프로필이 `~/.config/portable-chrome` 에 생성
-     (사용자마다 독립, `ca-certs/` 의 CA 는 각자 프로필에 자동 등록)
+**기본값이 이 구성입니다** — CA 는 공유 경로에서 자동으로, 프로필은 각 사용자 홈에 독립 저장:
+1. `ca-certs/` 에 사내 CA 를 넣어 AppImage 와 함께 (공유 드라이브 등에) 배포
+2. 사용자는 그냥 실행 → 프로필이 각자 `~/.config/portable-chrome` 에 생성되고,
+   `ca-certs/` 의 CA 는 각자 프로필에 자동 등록됨 (환경변수 불필요)
 
 ```bash
-CHROME_DATA_IN_HOME=1 ./Google-Chrome-x86_64.AppImage
+./Google-Chrome-x86_64.AppImage      # 프로필: ~/.config/portable-chrome (계정별 독립)
 ```
 
-- **프로필 위치는 AppImage 파일이 있는 폴더 기준**입니다(OS 계정별 아님). 그래서 공유 드라이브에
-  AppImage 하나만 두고 여러 명이 기본값으로 실행하면 **같은 프로필을 공유**해 충돌·프라이버시
-  문제가 생깁니다 → 이때 `CHROME_DATA_IN_HOME=1`(또는 `CHROME_USER_DATA_DIR`)로 분리하세요.
+- 공유 드라이브에 AppImage 하나만 둬도 사용자별 프로필이라 **충돌·프라이버시 문제가 없습니다.**
+- 반대로 AppImage 파일과 프로필을 **함께 이동**시키는 포터블 방식이 필요하면
+  `CHROME_DATA_IN_HOME=0` (→ AppImage 옆 `chrome-portable-data/`).
 - 간단히는, CA 까지 등록해둔 `chrome-portable-data/` 를 AppImage 와 함께 **각 사용자 폴더로 복사**해도
   됩니다(각자 독립 프로필 + CA 포함).
 
