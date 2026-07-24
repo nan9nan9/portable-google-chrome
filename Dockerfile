@@ -29,7 +29,7 @@ RUN printf '%s\n' \
 #  - libglib2.0-bin         : glib-compile-schemas
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg file binutils xz-utils \
-        squashfs-tools libglib2.0-bin \
+        squashfs-tools libglib2.0-bin libnss3-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Google 공식 저장소 추가 후 Chrome 설치 (의존 라이브러리까지 함께 설치됨)

@@ -81,6 +81,25 @@ for pat in libsoftokn3 libfreebl3 libfreeblpriv3 libnssckbi libnssdbm3 libnsssys
     done < <(find "$LIBARCH" /usr/lib -maxdepth 3 -name "${pat}.so" 2>/dev/null)
 done
 
+# ── 2.6) certutil 번들 (사내/사설 CA 를 프로필 NSS DB 에 등록하는 데 사용) ──
+# 사내 MITM 프록시의 사설 루트 CA 를 신뢰시키려면 NSS DB 에 등록해야 하는데,
+# air-gap 환경엔 certutil 이 없을 수 있으므로 함께 번들한다. (의존 라이브러리는 이미 수집됨)
+echo "==> certutil 번들"
+mkdir -p "$APPDIR/usr/bin"
+CERTUTIL_SRC="$(command -v certutil || true)"
+if [ -n "$CERTUTIL_SRC" ]; then
+    cp -Lf "$CERTUTIL_SRC" "$APPDIR/usr/bin/certutil"
+    # certutil 의존성 중 미수집분 보강
+    ldd "$CERTUTIL_SRC" 2>/dev/null | awk '/=> \// {print $3}' | while IFS= read -r d; do
+        b="$(basename "$d")"
+        echo "$b" | grep -Eq "$EXCLUDE_RE" && continue
+        [ -e "$d" ] && cp -Lf "$d" "$APPDIR/usr/lib/$b" 2>/dev/null || true
+    done
+    echo "    certutil 포함"
+else
+    echo "    (certutil 미발견 — CHROME_EXTRA_CA 기능 비활성)"
+fi
+
 # ── 3) gdk-pixbuf 로더 (GTK 파일 대화상자의 아이콘/이미지 렌더링) ──────────
 # 로더 모듈을 복사하고 캐시를 @@APPDIR@@ 토큰으로 생성 → 실행 시 실제 경로로 치환.
 echo "==> gdk-pixbuf 로더 번들"
@@ -191,6 +210,43 @@ else
     BASE_DIR="$HERE"          # 추출(extract) 실행 시엔 AppDir 기준
 fi
 DATA_DIR="${CHROME_USER_DATA_DIR:-$BASE_DIR/chrome-portable-data}"
+
+# ── 사내/사설 루트 CA 신뢰 (선택) ─────────────────────────────────────────
+# 회사·학교 네트워크가 HTTPS 를 사설 CA 로 재서명(MITM)하면 Chrome 이 그 CA 를 몰라
+# net_error -202(ERR_CERT_AUTHORITY_INVALID)가 난다. (Firefox 는 자체 저장소라 통과)
+# CHROME_EXTRA_CA 에 사설 루트 CA 파일(PEM) 또는 그런 파일들이 든 디렉토리를 지정하면,
+# 번들된 certutil 로 "포터블 프로필 내부" NSS DB 에 등록해 Chrome 이 신뢰하게 한다.
+# 등록 정보가 프로필과 함께 이동하도록, 이 경우 HOME 을 프로필로 돌려 $HOME/.pki/nssdb 사용.
+if [ -n "${CHROME_EXTRA_CA:-}" ] || [ -d "$DATA_DIR/.pki/nssdb" ]; then
+    export HOME="$DATA_DIR"
+    NSSDB="$HOME/.pki/nssdb"
+    CU="$HERE/usr/bin/certutil"
+    mkdir -p "$NSSDB"
+    if [ ! -f "$NSSDB/cert9.db" ] && [ -x "$CU" ]; then
+        "$CU" -d "sql:$NSSDB" -N --empty-password >/dev/null 2>&1 || true
+    fi
+    if [ -n "${CHROME_EXTRA_CA:-}" ] && [ -x "$CU" ]; then
+        _import_ca() {
+            local f="$1" nick
+            nick="portable-ca-$(basename "$f")"
+            "$CU" -d "sql:$NSSDB" -D -n "$nick" >/dev/null 2>&1 || true
+            if "$CU" -d "sql:$NSSDB" -A -t "C,," -n "$nick" -i "$f" >/dev/null 2>&1; then
+                echo "portable-chrome: 사설 CA 등록됨 → $f" >&2
+            else
+                echo "portable-chrome: 사설 CA 등록 실패(PEM 형식 확인) → $f" >&2
+            fi
+        }
+        if [ -d "$CHROME_EXTRA_CA" ]; then
+            for f in "$CHROME_EXTRA_CA"/*.pem "$CHROME_EXTRA_CA"/*.crt "$CHROME_EXTRA_CA"/*.cer; do
+                [ -e "$f" ] && _import_ca "$f"
+            done
+        elif [ -f "$CHROME_EXTRA_CA" ]; then
+            _import_ca "$CHROME_EXTRA_CA"
+        else
+            echo "portable-chrome: CHROME_EXTRA_CA 경로를 찾을 수 없음 → $CHROME_EXTRA_CA" >&2
+        fi
+    fi
+fi
 
 # 사용자가 이미 준 플래그는 중복 주입하지 않는다
 has_flag() { local pfx="$1"; shift; for a in "$@"; do case "$a" in "$pfx"|"$pfx"=*) return 0;; esac; done; return 1; }
